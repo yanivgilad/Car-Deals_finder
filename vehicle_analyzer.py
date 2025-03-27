@@ -65,29 +65,41 @@ def load_data(csv_path):
         # הסרת כפילויות (אם יש)
         df.drop_duplicates(subset=['adNumber'], inplace=True)
         
-        # Filter out cars with no price or price = 0
+        # סינון רכבים ללא מחיר או עם מחיר 0
         df = df[df['price'] > 0]
         
-        # Convert date strings to datetime objects
+        # המרת תאריך הייצור ל-datetime
         df['productionDate'] = pd.to_datetime(df['productionDate'], errors='coerce')
         df.dropna(subset=['productionDate'], inplace=True)
         
-        # Extract year from production date for easier filtering
+        # הוספת productionYear
         df['productionYear'] = df['productionDate'].dt.year
 
-        # הוספת סיווג עסקה לכל שורה לפי 'description'
+        # === כאן מתחיל הקטע של סיווג העסקה ===
         def classify_row(description):
             if isinstance(description, str) and description.strip() != "":
                 full_label, score, _ = classify_deal(description)
                 simple_label = get_simple_label(full_label)
+                
+                # קודם כל, אם המודל מחזיר "עסקה גרועה" ואילו score >= 0.8 – שמור על "עסקה גרועה" (אדום)
+                if simple_label == "עסקה גרועה" and score >= 0.8:
+                    simple_label = "עסקה גרועה"
+                # אחר כך, אם המודל מחזיר "עסקה מצויינת" ואילו score >= 0.9 – שמור על "עסקה מצויינת" (ירוק)
+                elif simple_label == "עסקה מצויינת" and score >= 0.9:
+                    simple_label = "עסקה מצויינת"
+                # בכל שאר המקרים – סווג כ"בינונית" (צהוב)
+                else:
+                    simple_label = "עסקה בינונית"
+                
                 return simple_label, score
             else:
-                return "N/A", 0
+                return "N/A", 0.0
 
-        # הפעלת הפונקציה על העמודה 'description' והוספת שתי עמודות: 'deal_category' ו-'deal_score'
+
+
+
         df[['deal_category', 'deal_score']] = df['description'].apply(lambda d: pd.Series(classify_row(d)))
 
-        # המרת התווית לצבע – הוספת עמודת 'deal_color'
         def map_deal_color(category):
             if category == "עסקה מצויינת":
                 return "green"
@@ -99,12 +111,13 @@ def load_data(csv_path):
                 return "gray"
 
         df['deal_color'] = df['deal_category'].apply(map_deal_color)
+        # === כאן מסתיים קטע הסיווג ===
 
-        
         return df
     except Exception as e:
         print(f"Error loading data: {str(e)}")
         sys.exit(1)
+
 
 def create_dashboard(df, port=8050):
     """Create and run an interactive Dash app for visualizing the data"""
@@ -436,7 +449,7 @@ def create_dashboard(df, port=8050):
             color='deal_category',  # השתמשו בעמודת הסיווג
             color_discrete_map=color_discrete_map,
             size_max=8,
-            hover_data=['model', 'subModel', 'hand', 'km', 'city', 'productionDate', 'link', 'description', 'deal_category'],
+            hover_data=['model', 'subModel', 'hand', 'km', 'city', 'productionDate', 'link', 'description', 'deal_category', 'deal_score'],
             labels={
                 'productionDate': 'Production Date',
                 'price': 'Price (₪)',
@@ -456,8 +469,11 @@ def create_dashboard(df, port=8050):
             filtered_df['city'],
             filtered_df['productionDate'],
             filtered_df['link'],
-            filtered_df['description']
+            filtered_df['description'],
+            filtered_df['deal_score']
         ))
+
+
         
         fig.update_traces(
             marker=dict(
@@ -473,9 +489,12 @@ def create_dashboard(df, port=8050):
                 'Hand: %{customdata[2]}<br>'
                 'KM: %{customdata[3]:,.0f}<br>'
                 'City: %{customdata[4]}<br>'
+                'Score: %{customdata[8]:.2f}<br>'  # מציג את ה־score עם שתי ספרות אחרי הנקודה
                 '<b>👆 לחץ להצגת תיאור</b>'
             )
         )
+
+            
         
         # 3) עקומת דעיכה אקספוננציאלית (על days_since_newest)
         if len(filtered_df) > 1:
