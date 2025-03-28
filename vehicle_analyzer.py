@@ -754,7 +754,7 @@ def main():
     df = load_data(csv_path)
     
     # (לא חובה למחוק את ה-CSV, תלוי בצרכים שלכם)
-    os.unlink(csv_path)
+    #os.unlink(csv_path)
     
     create_dashboard(df, args.port)
 
