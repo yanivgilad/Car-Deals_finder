@@ -74,38 +74,12 @@ def load_data(csv_path):
         # הוספת productionYear
         df['productionYear'] = df['productionDate'].dt.year
 
-        # === כאן מתחיל קטע סיווג העסקה ===
-        def classify_row(description):
-            if isinstance(description, str) and description.strip() != "":
-                full_label, score, _ = classify_deal(description)
-                simple_label = get_simple_label(full_label)
-                
-                # קודם נבדוק את תנאי "עסקה גרועה"
-                if simple_label == "עסקה גרועה" and score >= 0.8:
-                    simple_label = "עסקה גרועה"
-                # לאחר מכן, תנאי "עסקה מצויינת"
-                elif simple_label == "עסקה מצויינת" and score >= 0.9:
-                    simple_label = "עסקה מצויינת"
-                # בכל מקרה אחר – נסווג כ"בינונית"
-                else:
-                    simple_label = "עסקה בינונית"
-                
-                return simple_label, score
-            else:
-                return "N/A", 0.0
-
-        df[['deal_category', 'deal_score']] = df['description'].apply(lambda d: pd.Series(classify_row(d)))
-
-        def map_deal_color(category, score):
-            if category == "עסקה מצויינת" and score >= 0.9:
-                return "green"
-            elif category == "עסקה גרועה" and score >= 0.8:
-                return "red"
-            else:
-                return "yellow"
-
-        df['deal_color'] = df.apply(lambda row: map_deal_color(row['deal_category'], row['deal_score']), axis=1)
-        # === כאן מסתיים קטע הסיווג ===
+        # === ביטול סיווג העסקה לצורך בדיקת כפילויות ===
+        # במקום לסווג את העסקה, נמלא את העמודות בערכי ברירת מחדל
+        df['deal_category'] = "N/A"
+        df['deal_score'] = 0.0
+        df['deal_color'] = "gray"
+        # === סוף קטע הסיווג ===
 
         return df
     except Exception as e:
