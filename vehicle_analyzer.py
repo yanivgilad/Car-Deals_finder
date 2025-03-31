@@ -20,7 +20,7 @@ from deal_classifier import classify_deal, get_simple_label, get_color_for_deal
 from dash.exceptions import PreventUpdate
 
 def parse_arguments():
-    """Parse command line arguments"""
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Vehicle Price Analyzer')
     parser.add_argument('--output-dir', type=str, default='scraped_vehicles',
                         help='Directory to save scraped data')
@@ -37,13 +37,13 @@ def parse_arguments():
     return parser.parse_args()
 
 def scrape_data(output_dir, manufacturer, model, max_pages):
-    """Run the scraper to collect vehicle data"""
+    """Run the scraper to collect vehicle data."""
     print(f"Scraping data for manufacturer={manufacturer}, model={model}...")
     scraper = VehicleScraper(output_dir, manufacturer, model)
     scraper.scrape_pages(max_page=max_pages)
     
 def process_data(output_dir):
-    """Process the scraped HTML files into a CSV"""
+    """Process the scraped HTML files into a CSV file."""
     print("Processing scraped HTML files...")
     dir_name = Path(output_dir).name
     yad2_parser.process_directory(output_dir)
@@ -57,38 +57,89 @@ def process_data(output_dir):
     return output_path
 
 def load_data(csv_path):
-    """Load and prepare the CSV data for visualization"""
+    """Load and prepare the CSV data for visualization."""
     try:
         df = pd.read_csv(csv_path)
         
-        # הסרת כפילויות (אם יש)
+        # Remove duplicates if any
         df.drop_duplicates(subset=['adNumber'], inplace=True)
         
-        # סינון רכבים ללא מחיר או עם מחיר 0
+        # Filter out vehicles with no price or with a price of 0
         df = df[df['price'] > 0]
         
-        # המרת תאריך הייצור ל-datetime
+        # Convert productionDate to datetime and drop invalid dates
         df['productionDate'] = pd.to_datetime(df['productionDate'], errors='coerce')
         df.dropna(subset=['productionDate'], inplace=True)
         
-        # הוספת productionYear
+        # Add productionYear column
         df['productionYear'] = df['productionDate'].dt.year
 
-        # === ביטול סיווג העסקה לצורך בדיקת כפילויות ===
-        # במקום לסווג את העסקה, נמלא את העמודות בערכי ברירת מחדל
-        df['deal_category'] = "N/A"
-        df['deal_score'] = 0.0
-        df['deal_color'] = "gray"
-        # === סוף קטע הסיווג ===
+        # --- Begin deal classification block ---
+        def classify_row(description):
+            if isinstance(description, str) and description.strip() != "":
+                full_label, score, _ = classify_deal(description)
+                simple_label = get_simple_label(full_label)
+                
+                # Check for "Bad Deal" condition
+                if simple_label == "Bad Deal" and score >= 0.8:
+                    simple_label = "Bad Deal"
+                # Check for "Excellent Deal" condition
+                elif simple_label == "Excellent Deal" and score >= 0.9:
+                    simple_label = "Excellent Deal"
+                # Otherwise, classify as "Medium Deal"
+                else:
+                    simple_label = "Medium Deal"
+                
+                return simple_label, score
+            else:
+                return "N/A", 0.0
+
+        # Apply classification to the description field
+        df[['deal_category', 'deal_score']] = df['description'].apply(lambda d: pd.Series(classify_row(d)))
+
+        # Debug: Print unique values and counts before cleaning
+        print("Before cleaning - Unique deal_category values:", df['deal_category'].unique())
+        print("Before cleaning - deal_category counts:")
+        print(df['deal_category'].value_counts())
+
+        # Clean the deal_category strings to remove extra spaces and normalize Unicode
+        df['deal_category'] = df['deal_category'].str.strip()
+        import unicodedata
+        df['deal_category'] = df['deal_category'].apply(lambda x: unicodedata.normalize("NFC", x))
+
+        # Debug: Print unique values and counts after cleaning
+        print("After cleaning - Unique deal_category values:", df['deal_category'].unique())
+        print("After cleaning - deal_category counts:")
+        print(df['deal_category'].value_counts())
+
+        def map_deal_color(category, score):
+            if category == "Excellent Deal" and score >= 0.9:
+                return "green"
+            elif category == "Bad Deal" and score >= 0.8:
+                return "red"
+            else:
+                return "yellow"
+
+        df['deal_color'] = df.apply(lambda row: map_deal_color(row['deal_category'], row['deal_score']), axis=1)
+        # --- End deal classification block ---
+
+        # Print the final deal_category values before further processing
+        print("Final deal_category unique values:", df['deal_category'].unique())
+        print("Final deal_category counts:")
+        print(df['deal_category'].value_counts())
+
+        # Optionally, for debugging purposes, overwrite deal_category with a constant value
+        # Uncomment the next two lines to force all values to "Bad Deal"
+        # df['deal_category'] = "Bad Deal"
+        # print("After overwriting with 'Bad Deal':", df['deal_category'].unique(), df['deal_category'].value_counts())
 
         return df
     except Exception as e:
         print(f"Error loading data: {str(e)}")
         sys.exit(1)
 
-
 def create_dashboard(df, port=8050):
-    """Create and run an interactive Dash app for visualizing the data"""
+    """Create and run an interactive Dash app for visualizing the data."""
     external_stylesheets = [
         {
             'href': 'https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap',
@@ -102,7 +153,7 @@ def create_dashboard(df, port=8050):
         suppress_callback_exceptions=True
     )
     
-    # Get unique values for filters
+    # Define filter options for km ranges, owner hand, model, listing type, and sub-model
     km_ranges = [
         {'label': 'All', 'value': 'all'},
         {'label': '≤ 10,000 km/year', 'value': '0-10000'},
@@ -126,7 +177,7 @@ def create_dashboard(df, port=8050):
         {'label': at, 'value': at} for at in sorted(df['listingType'].unique())
     ]
     
-    # Define CSS styles
+    # Define CSS styles for the dashboard layout
     styles = {
         'container': {
             'font-family': 'Roboto, sans-serif',
@@ -294,36 +345,35 @@ def create_dashboard(df, port=8050):
         ], style=styles['filter_container']),
         
         html.Div([
-            html.P("👆 לחץ על נקודה בתרשים להצגת תיאור המודעה")
+            html.P("Click on a data point to view the ad description")
         ], style=styles['click_instruction']),
         
         html.Div([
             dcc.Graph(id='price-date-scatter')
         ], style=styles['graph']),
         
-        # Description container (RTL for Hebrew)
+        # Description container (left-to-right)
         html.Div(id='description-container', style={
-            'direction': 'rtl',
-            'text-align': 'right',
+            'text-align': 'left',
             'border': '1px solid #ccc',
             'padding': '10px',
             'margin': '10px 0'
         }),
         
-        # Summary section - overall
+        # Overall summary section
         html.Div([
             html.H3("Data Summary", style=styles['summary_header']),
             html.Div(id='summary-stats')
         ], style=styles['summary']),
         
-        # Second summary row for the selected year's stats
+        # Yearly summary section
         html.Div([
             html.H3("Yearly Summary", style=styles['summary_header']),
             html.Div(id='summary-stats-yearly')
         ], style=styles['summary']),
     ], style=styles['container'])
     
-    # ~~~~~~~~~~~~~ Callbacks ~~~~~~~~~~~~~
+    # --- Callbacks ---
     
     @app.callback(
         Output('submodel-checklist', 'options'),
@@ -345,10 +395,10 @@ def create_dashboard(df, port=8050):
             for sm in sorted(filtered_df['subModel'].unique()):
                 models_for_submodel = filtered_df[filtered_df['subModel'] == sm]['model'].unique()
                 if len(models_for_submodel) == 1:
-                    label = f" {sm} [{models_for_submodel[0]}]"
+                    label = f"{sm} [{models_for_submodel[0]}]"
                 else:
                     models_str = '+'.join(models_for_submodel)
-                    label = f" {sm} [{models_str}]"
+                    label = f"{sm} [{models_str}]"
                 submodel_options.append({'label': label, 'value': sm})
         return sorted(submodel_options, key=lambda x: x['label'])
     
@@ -373,7 +423,7 @@ def create_dashboard(df, port=8050):
     def update_graph(km_range, hand, models, submodel_btn_clicks, adtype, submodel_list):
         filtered_df = df.copy()
         
-        # סינונים
+        # Filtering based on selected options
         if km_range != 'all':
             min_km, max_km = map(int, km_range.split('-'))
             filtered_df = filtered_df[filtered_df['km_per_year'] <= max_km]
@@ -393,17 +443,17 @@ def create_dashboard(df, port=8050):
         if adtype != 'all':
             filtered_df = filtered_df[filtered_df['listingType'] == adtype]
         
-        # סדר את הנתונים לפי productionDate
+        # Sort data by productionDate
         filtered_df = filtered_df.sort_values('productionDate')
         
-        # חשב את ההפרש בימים בין התאריך הנוכחי לתאריך הייצור
+        # Calculate days difference between today and productionDate
         current_date = pd.Timestamp.today().normalize()
         filtered_df['days_since_current'] = (current_date - filtered_df['productionDate']).dt.days
         
         color_discrete_map = {
-            "עסקה מצויינת": "green",
-            "עסקה בינונית": "yellow",
-            "עסקה גרועה": "red",
+            "Excellent Deal": "green",
+            "Medium Deal": "yellow",
+            "Bad Deal": "red",
             "N/A": "gray"
         }
         
@@ -423,10 +473,10 @@ def create_dashboard(df, port=8050):
             title=f'Vehicle Prices by Production Date ({len(filtered_df)} vehicles)'
         )
         
-        # הגדר את ציר ה-X כ-date
+        # Set x-axis as date
         fig.update_layout(xaxis_type='date')
         
-        # 2) הכנת customData ל-hover – נוסיף גם את deal_score (עמודה 9)
+        # Prepare custom data for hover – including deal_score
         custom_data = np.column_stack((
             filtered_df['model'],
             filtered_df['subModel'],
@@ -454,11 +504,11 @@ def create_dashboard(df, port=8050):
                 'KM: %{customdata[3]:,.0f}<br>'
                 'City: %{customdata[4]}<br>'
                 'Score: %{customdata[8]:.2f}<br>'
-                '<b>👆 לחץ להצגת תיאור</b>'
+                '<b>Click to view description</b>'
             )
         )
         
-        # 3) עקומת דעיכה אקספוננציאלית (על days_since_current)
+        # Exponential decay curve on days_since_current
         if len(filtered_df) > 1:
             sorted_df = filtered_df.sort_values('days_since_current')
             x = sorted_df['days_since_current'].values
@@ -508,7 +558,7 @@ def create_dashboard(df, port=8050):
                     
                     y_curve = model(x_curve)
                     
-                    # המרת x_curve (מספר ימים) לתאריכים: current_date - timedelta(days)
+                    # Convert x_curve (days) to dates
                     curve_dates = current_date - pd.to_timedelta(x_curve, unit='D')
                     
                     fig.add_trace(go.Scatter(
@@ -522,7 +572,7 @@ def create_dashboard(df, port=8050):
                 except Exception as e:
                     print(f"Error fitting exponential curve: {str(e)}")
         
-        # 5) סיכום ראשי
+        # Main summary section
         summary_style = {
             'container': {
                 'display': 'flex',
@@ -565,9 +615,8 @@ def create_dashboard(df, port=8050):
             
             html.Div([
                 html.P("Price Range", style=summary_style['label']),
-                (html.P(f"₪{filtered_df['price'].min():,.0f} - ₪{filtered_df['price'].max():,.0f}", 
-                        style=summary_style['value'])
-                 if len(filtered_df) else html.P("—", style=summary_style['value']))
+                html.P(f"₪{filtered_df['price'].min():,.0f} - ₪{filtered_df['price'].max():,.0f}", 
+                       style=summary_style['value'])
             ], style=summary_style['card']),
             
             html.Div([
@@ -595,7 +644,7 @@ def create_dashboard(df, port=8050):
         link = point['customdata'][6]
         return html.Div([
             html.P(description, style={'whiteSpace': 'pre-wrap', 'margin': '0 0 10px 0'}),
-            html.A("לעבור להודעה", href=link, target="_blank", style={
+            html.A("View Ad", href=link, target="_blank", style={
                 'display': 'inline-block',
                 'padding': '10px 20px',
                 'backgroundColor': '#2c3e50',
@@ -727,8 +776,8 @@ def main():
     csv_path = process_data(args.output_dir)
     df = load_data(csv_path)
     
-    # (לא חובה למחוק את ה-CSV, תלוי בצרכים שלכם)
-    #os.unlink(csv_path)
+    # Optionally delete the CSV file if not needed
+    # os.unlink(csv_path)
     
     create_dashboard(df, args.port)
 

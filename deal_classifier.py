@@ -66,13 +66,4 @@ def get_color_for_deal(simple_label: str) -> str:
     else:
         return "gray"
 
-# דוגמה לשימוש (ניתן להריץ את הקובץ הזה בנפרד):
-if __name__ == "__main__":
-    example_description = "רכב במצב מצוין, מחיר נמוך במיוחד, ירושתי – עסקה שלא תחזור!"
-    full_label, score, result = classify_deal(example_description)
-    simple_label = get_simple_label(full_label)
-    color = get_color_for_deal(simple_label)
-    print("Full label:", full_label)
-    print("Simple label:", simple_label)
-    print("Score:", score)
-    print("Assigned color:", color)
+
