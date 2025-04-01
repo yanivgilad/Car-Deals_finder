@@ -14,7 +14,7 @@ from transformers import pipeline
 
 # הגדרת candidate_labels עם פירוט מלא לכל קטגוריה
 candidate_labels = [
-    "עסקה מצויינת: רכב במצב מצוין, התקבל בירושה, חייב למכור, עובר לחו\"ל",
+    "עסקה מצויינת: רכב במצב מצוין, התקבל בירושה, חייב למכור, עובר לחול",
     "עסקה בינונית: רכב במצב רגיל, ללא סימנים לעסקה יוצאת דופן או בעיות",
     "עסקה גרועה: רכב עם תקלות חמורות, בעיות מכניות קשות, דורש תיקונים יקרים, לא מומלץ"
 ]
@@ -59,11 +59,9 @@ def get_color_for_deal(simple_label: str) -> str:
     """
     if simple_label == "עסקה מצויינת":
         return "green"
-    elif simple_label == "עסקה בינונית":
-        return "yellow"
     elif simple_label == "עסקה גרועה":
         return "red"
     else:
-        return "gray"
+        return "yellow"
 
 

@@ -81,14 +81,14 @@ def load_data(csv_path):
                 simple_label = get_simple_label(full_label)
                 
                 # Check for "Bad Deal" condition
-                if simple_label == "Bad Deal" and score >= 0.8:
-                    simple_label = "Bad Deal"
+                if simple_label == "עסקה גרועה" and score >= 0.8:
+                    simple_label = "עסקה גרועה"
                 # Check for "Excellent Deal" condition
-                elif simple_label == "Excellent Deal" and score >= 0.9:
-                    simple_label = "Excellent Deal"
+                elif simple_label == "עסקה מצויינת" and score >= 0.9:
+                    simple_label = "עסקה מצויינת"
                 # Otherwise, classify as "Medium Deal"
                 else:
-                    simple_label = "Medium Deal"
+                    simple_label = "עסקה בינונית"
                 
                 return simple_label, score
             else:
@@ -113,9 +113,9 @@ def load_data(csv_path):
         print(df['deal_category'].value_counts())
 
         def map_deal_color(category, score):
-            if category == "Excellent Deal" and score >= 0.9:
+            if category == "עסקה מצויינת" and score >= 0.9:
                 return "green"
-            elif category == "Bad Deal" and score >= 0.8:
+            elif category == "עסקה גרועה" and score >= 0.8:
                 return "red"
             else:
                 return "yellow"
@@ -130,7 +130,8 @@ def load_data(csv_path):
 
         # Optionally, for debugging purposes, overwrite deal_category with a constant value
         # Uncomment the next two lines to force all values to "Bad Deal"
-        # df['deal_category'] = "Bad Deal"
+        df['deal_category'] = "Bd Deal"
+
         # print("After overwriting with 'Bad Deal':", df['deal_category'].unique(), df['deal_category'].value_counts())
 
         return df
@@ -451,9 +452,9 @@ def create_dashboard(df, port=8050):
         filtered_df['days_since_current'] = (current_date - filtered_df['productionDate']).dt.days
         
         color_discrete_map = {
-            "Excellent Deal": "green",
-            "Medium Deal": "yellow",
-            "Bad Deal": "red",
+            "עסקה מצויינת": "green",
+            "עסקה בינונית": "yellow",
+            "עסקה גרועה": "red",
             "N/A": "gray"
         }
         
